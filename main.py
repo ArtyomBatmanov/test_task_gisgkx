@@ -1,73 +1,73 @@
 import os
-from fastapi import FastAPI, UploadFile
+from pydub import AudioSegment
 from vosk import Model, KaldiRecognizer
 import wave
 import json
-from pydub import AudioSegment
-from pydub.silence import detect_nonsilent
+import random
 
-app = FastAPI()
+MODEL_PATH = "model/vosk-model-small-ru-0.22"
 
-# Загрузка модели VOSK
-MODEL_PATH = "vosk-model-small-ru-0.22"  # Укажите путь к вашей модели
 if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError("VOSK model not found!")
+    raise FileNotFoundError("Please download the VOSK model and place it in the 'model' folder.")
+
 model = Model(MODEL_PATH)
 
 
-# Функция для анализа аудио
-def analyze_audio(file_path):
-    audio = AudioSegment.from_file(file_path, format="mp3")
-    audio = audio.set_channels(1)  # Преобразование в моно
-    audio.export("temp.wav", format="wav")  # Сохранение как WAV
+def convert_mp3_to_wav(input_file, output_file):
+    """Конвертирует MP3 в WAV формат."""
+    audio = AudioSegment.from_mp3(input_file)
+    audio.export(output_file, format="wav")
 
-    # Открытие WAV файла для анализа
-    # wf = wave.open("temp.wav", "rb")
-    audio.export("temp.wav", format="wav")  # Конвертация в WAV
-    wf = wave.open("temp.wav", "rb")
 
-    if wf.getnchannels() != 1:
-        raise ValueError("Audio must be mono channel.")
-    if wf.getsampwidth() != 2:
-        raise ValueError("Audio must be 16-bit.")
-    if wf.getframerate() not in [8000, 16000]:
-        raise ValueError("Audio sample rate must be 8k or 16k Hz.")
+def process_audio(file_path):
+    """Обрабатывает аудио файл и возвращает список реплик."""
+    wf = wave.open(file_path, "rb")
+    if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() != 16000:
+        raise ValueError("Audio file must be WAV format mono PCM with 16kHz sample rate.")
 
-    rec = KaldiRecognizer(model, wf.getframerate())
-    rec.SetWords(True)
+    recognizer = KaldiRecognizer(model, wf.getframerate())
+    recognizer.SetWords(True)
+    results = []
 
-    dialog = []
-    receiver_duration = 0
-    transmitter_duration = 0
-
-    # Обработка аудио через VOSK
     while True:
         data = wf.readframes(4000)
         if len(data) == 0:
             break
-        if rec.AcceptWaveform(data):
-            result = json.loads(rec.Result())
-            text = result.get("text", "")
-            if text:
-                # Условно разделяем на стороны receiver/transmitter
-                side = "receiver" if len(dialog) % 2 == 0 else "transmitter"
-                duration = len(audio) // 1000  # пример оценки длительности
-                raised_voice = audio.dBFS > -20  # простая логика для определения громкости
-                gender = "male" if side == "receiver" else "female"  # условно
-                dialog.append({
-                    "source": side,
-                    "text": text,
-                    "duration": duration,
-                    "raised_voice": raised_voice,
-                    "gender": gender,
-                })
-                if side == "receiver":
-                    receiver_duration += duration
-                else:
-                    transmitter_duration += duration
+        if recognizer.AcceptWaveform(data):
+            result = json.loads(recognizer.Result())
+            results.append(result)
 
-    wf.close()
-    os.remove("temp.wav")
+    final_result = json.loads(recognizer.FinalResult())
+    results.append(final_result)
+    return results
+
+
+def analyze_text(result):
+    """Анализирует текстовые данные для формирования JSON-ответа."""
+    dialog = []
+    receiver_duration = 0
+    transmitter_duration = 0
+
+    for res in result:
+        if "text" in res and res["text"].strip():
+            text = res["text"]
+            duration = random.randint(5, 10)  # Заменить на реальную длительность, если возможно
+            raised_voice = random.choice([True, False])  # Пример: определить тональность
+            gender = random.choice(["male", "female"])  # Пример: определить пол
+
+            source = "receiver" if random.choice([True, False]) else "transmitter"
+            if source == "receiver":
+                receiver_duration += duration
+            else:
+                transmitter_duration += duration
+
+            dialog.append({
+                "source": source,
+                "text": text,
+                "duration": duration,
+                "raised_voice": raised_voice,
+                "gender": gender
+            })
 
     return {
         "dialog": dialog,
@@ -78,19 +78,26 @@ def analyze_audio(file_path):
     }
 
 
-# POST-эндпоинт для обработки аудиофайла
-@app.post("/asr")
-async def asr(file: UploadFile):
-    file_path = f"temp_{file.filename}"
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
+def main(audio_path):
     try:
-        result = analyze_audio(file_path)
-    finally:
-        os.remove(file_path)
+        if not os.path.exists(audio_path):
+            return {"error": f"File '{audio_path}' not found."}
 
-    return result
+        local_wav = "temp.wav"
+        convert_mp3_to_wav(audio_path, local_wav)
 
-# Запуск приложения
-# Используйте команду:
+        results = process_audio(local_wav)
+        response = analyze_text(results)
+
+        os.remove(local_wav)
+        return response
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+if __name__ == "__main__":
+    # Пример использования
+    input_audio = "test2.mp3"  # Укажите путь к локальному MP3 файлу
+    output = main(input_audio)
+    print(json.dumps(output, ensure_ascii=False, indent=4))
