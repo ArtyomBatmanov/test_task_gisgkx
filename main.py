@@ -14,8 +14,10 @@ model = Model(MODEL_PATH)
 
 
 def convert_mp3_to_wav(input_file, output_file):
-    """Конвертирует MP3 в WAV формат."""
-    audio = AudioSegment.from_mp3(input_file)
+    """Конвертирует MP3 в WAV формат с параметрами: моно, 16kHz, PCM."""
+    audio = AudioSegment.from_file(input_file)
+    audio = audio.set_channels(1)  # Преобразовать в моно
+    audio = audio.set_frame_rate(16000)  # Установить частоту дискретизации 16kHz
     audio.export(output_file, format="wav")
 
 
