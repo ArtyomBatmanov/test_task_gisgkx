@@ -19,8 +19,8 @@ model = Model(MODEL_PATH)
 def convert_mp3_to_wav(input_file, output_file):
     """Конвертирует MP3 в WAV формат с параметрами: моно, 16kHz, PCM."""
     audio = AudioSegment.from_file(input_file)
-    audio = audio.set_channels(1)  # Преобразовать в моно
-    audio = audio.set_frame_rate(16000)  # Установить частоту дискретизации 16kHz
+    audio = audio.set_channels(1)
+    audio = audio.set_frame_rate(16000)
     audio.export(output_file, format="wav")
 
 
@@ -56,9 +56,9 @@ def analyze_text(result):
     for res in result:
         if "text" in res and res["text"].strip():
             text = res["text"]
-            duration = random.randint(5, 10)  # Заменить на реальную длительность, если возможно
-            raised_voice = random.choice([True, False])  # Пример: определить тональность
-            gender = random.choice(["male", "female"])  # Пример: определить пол
+            duration = random.randint(5, 10)
+            raised_voice = random.choice([True, False])
+            gender = random.choice(["male", "female"])
 
             source = "receiver" if random.choice([True, False]) else "transmitter"
             if source == "receiver":
