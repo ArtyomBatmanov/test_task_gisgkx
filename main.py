@@ -1,9 +1,12 @@
 import os
+from flask import Flask, request, jsonify
 from pydub import AudioSegment
 from vosk import Model, KaldiRecognizer
 import wave
 import json
 import random
+
+app = Flask(__name__)
 
 MODEL_PATH = "model/vosk-model-small-ru-0.22"
 
@@ -80,10 +83,14 @@ def analyze_text(result):
     }
 
 
-def main(audio_path):
+@app.route('/asr', methods=['POST'])
+def asr():
     try:
-        if not os.path.exists(audio_path):
-            return {"error": f"File '{audio_path}' not found."}
+        data = request.json
+        audio_path = data.get('file_path')
+
+        if not audio_path or not os.path.exists(audio_path):
+            return jsonify({"error": "Invalid or missing 'file_path' parameter."}), 400
 
         local_wav = "temp.wav"
         convert_mp3_to_wav(audio_path, local_wav)
@@ -92,14 +99,11 @@ def main(audio_path):
         response = analyze_text(results)
 
         os.remove(local_wav)
-        return response
+        return jsonify(response)
 
     except Exception as e:
-        return {"error": str(e)}
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
-    # Пример использования
-    input_audio = "test2.mp3"  # Укажите путь к локальному MP3 файлу
-    output = main(input_audio)
-    print(json.dumps(output, ensure_ascii=False, indent=4))
+    app.run(host="0.0.0.0", port=5000)
